@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+
+  <PropertyGroup>
+    <PackageId>MarkupConverter.Core</PackageId>
+    <TargetFramework>netcoreapp3.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Authors>mmanela;btihanyi</Authors>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <Company>Balazs Tihanyi</Company>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <Description>This package provides a library to convert from RTF to HTML and vice versa.</Description>
+    <PackageProjectUrl>https://github.com/btihanyi/MarkupConverter.Core</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/btihanyi/MarkupConverter.Core.git</RepositoryUrl>
+    <PackageTags>RTF;HTML;Converter</PackageTags>
+  </PropertyGroup>
+
+</Project>
