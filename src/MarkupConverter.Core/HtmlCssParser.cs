@@ -1,46 +1,100 @@
 ﻿//---------------------------------------------------------------------------
-// 
+//
 // File: HtmlXamlConverter.cs
 //
 // Copyright (C) Microsoft Corporation.  All rights reserved.
 //
-// Description: Prototype for Html - Xaml conversion 
+// Description: Prototype for HTML - Exam conversion
 //
 //---------------------------------------------------------------------------
 
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Xml;
+
 namespace MarkupConverter.Core
 {
-    using System;
-    using System.Xml;
-    using System.Diagnostics;
-    using System.Collections;
-    using System.Collections.Generic;
-    using System.Text;
-    using System.IO;
-
-    using System.Windows; // DependencyProperty
-    using System.Windows.Documents; // TextElement
-  
     internal static class HtmlCssParser
     {
-        // .................................................................
-        //
-        // Processing CSS Attributes
-        //
-        // .................................................................
+        // list-style: [ <list-style-type> || <list-style-position> || <list-style-image> ]
+        private static readonly string[] ListStyleTypes = new string[] { "disc", "circle", "square", "decimal", "lower-roman", "upper-roman", "lower-alpha", "upper-alpha", "none" };
+        private static readonly string[] ListStylePositions = new string[] { "inside", "outside" };
+        private static readonly string[] TextDecorations = new string[] { "none", "underline", "overline", "line-through", "blink" };
+        private static readonly string[] TextTransforms = new string[] { "none", "capitalize", "uppercase", "lowercase" };
+        private static readonly string[] TextAligns = new string[] { "left", "right", "center", "justify" };
+        private static readonly string[] Floats = new string[] { "left", "right", "none" };
 
-        internal static void GetElementPropertiesFromCssAttributes(XmlElement htmlElement, string elementName, CssStylesheet stylesheet, Hashtable localProperties, List<XmlElement> sourceContext)
+        private static readonly string[] Colors = new string[]
         {
-            string styleFromStylesheet = stylesheet.GetStyle(elementName, sourceContext);
+            "aliceblue", "antiquewhite", "aqua", "aquamarine", "azure", "beige", "bisque", "black", "blanchedalmond",
+            "blue", "blueviolet", "brown", "burlywood", "cadetblue", "chartreuse", "chocolate", "coral",
+            "cornflowerblue", "cornsilk", "crimson", "cyan", "darkblue", "darkcyan", "darkgoldenrod", "darkgray",
+            "darkgreen", "darkkhaki", "darkmagenta", "darkolivegreen", "darkorange", "darkorchid", "darkred",
+            "darksalmon", "darkseagreen", "darkslateblue", "darkslategray", "darkturquoise", "darkviolet", "deeppink",
+            "deepskyblue", "dimgray", "dodgerblue", "firebrick", "floralwhite", "forestgreen", "fuchsia", "gainsboro",
+            "ghostwhite", "gold", "goldenrod", "gray", "green", "greenyellow", "honeydew", "hotpink", "indianred",
+            "indigo", "ivory", "khaki", "lavender", "lavenderblush", "lawngreen", "lemonchiffon", "lightblue", "lightcoral",
+            "lightcyan", "lightgoldenrodyellow", "lightgreen", "lightgrey", "lightpink", "lightsalmon", "lightseagreen",
+            "lightskyblue", "lightslategray", "lightsteelblue", "lightyellow", "lime", "limegreen", "linen", "magenta",
+            "maroon", "mediumaquamarine", "mediumblue", "mediumorchid", "mediumpurple", "mediumseagreen", "mediumslateblue",
+            "mediumspringgreen", "mediumturquoise", "mediumvioletred", "midnightblue", "mintcream", "mistyrose", "moccasin",
+            "navajowhite", "navy", "oldlace", "olive", "olivedrab", "orange", "orangered", "orchid", "palegoldenrod",
+            "palegreen", "paleturquoise", "palevioletred", "papayawhip", "peachpuff", "peru", "pink", "plum", "powderblue",
+            "purple", "red", "rosybrown", "royalblue", "saddlebrown", "salmon", "sandybrown", "seagreen", "seashell",
+            "sienna", "silver", "skyblue", "slateblue", "slategray", "snow", "springgreen", "steelblue", "tan", "teal",
+            "thistle", "tomato", "turquoise", "violet", "wheat", "white", "whitesmoke", "yellow", "yellowgreen",
+        };
 
+        private static readonly string[] SystemColors = new string[]
+        {
+            "activeborder", "activecaption", "appworkspace", "background", "buttonface", "buttonhighlight", "buttonshadow",
+            "buttontext", "captiontext", "graytext", "highlight", "highlighttext", "inactiveborder", "inactivecaption",
+            "inactivecaptiontext", "infobackground", "infotext", "menu", "menutext", "scrollbar", "threeddarkshadow",
+            "threedface", "threedhighlight", "threedlightshadow", "threedshadow", "window", "windowframe", "windowtext",
+        };
+
+        private static readonly string[] VerticalAligns = new string[] { "baseline", "sub", "super", "top", "text-top", "middle", "bottom", "text-bottom" };
+        private static readonly string[] Clears = new string[] { "none", "left", "right", "both" };
+        private static readonly string[] BorderStyles = new string[] { "none", "dotted", "dashed", "solid", "double", "groove", "ridge", "inset", "outset" };
+        private static readonly string[] Blocks = new string[] { "block", "inline", "list-item", "none" };
+
+        // CSS has five font properties: font-family, font-style, font-variant, font-weight, font-size.
+        // An aggregated "font" property lets you specify in one action all the five in combination
+        // with additional line-height property.
+        //
+        // font-family: [<family-name>,]* [<family-name> | <generic-family>]
+        //    generic-family: serif | sans-serif | monospace | cursive | fantasy
+        //       The list of families sets priorities to choose fonts;
+        //       Quotes not allowed around generic-family names
+        // font-style: normal | italic | oblique
+        // font-variant: normal | small-caps
+        // font-weight: normal | bold | bolder | lighter | 100 ... 900 |
+        //    Default is "normal", normal==400
+        // font-size: <absolute-size> | <relative-size> | <length> | <percentage>
+        //    absolute-size: xx-small | x-small | small | medium | large | x-large | xx-large
+        //    relative-size: larger | smaller
+        //    length: <point> | <pica> | <ex> | <em> | <points> | <millimeters> | <centimeters> | <inches>
+        //    Default: medium
+        // font: [ <font-style> || <font-variant> || <font-weight ]? <font-size> [ / <line-height> ]? <font-family>
+        private static readonly string[] FontGenericFamilies = new string[] { "serif", "sans-serif", "monospace", "cursive", "fantasy" };
+        private static readonly string[] FontStyles = new string[] { "normal", "italic", "oblique" };
+        private static readonly string[] FontVariants = new string[] { "normal", "small-caps" };
+        private static readonly string[] FontWeights = new string[] { "normal", "bold", "bolder", "lighter", "100", "200", "300", "400", "500", "600", "700", "800", "900" };
+        private static readonly string[] FontAbsoluteSizes = new string[] { "xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large" };
+        private static readonly string[] FontRelativeSizes = new string[] { "larger", "smaller" };
+        private static readonly string[] FontSizeUnits = new string[] { "px", "mm", "cm", "in", "pt", "pc", "em", "ex", "%" };
+
+        internal static void GetElementPropertiesFromCssAttributes(XmlElement htmlElement, string elementName, CssStylesheet stylesheet, Dictionary<string, string> localProperties, List<XmlElement> sourceContext)
+        {
             string styleInline = HtmlToXamlConverter.GetAttribute(htmlElement, "style");
 
-            // Combine styles from stylesheet and from inline attribute.
+            // Combine styles from style sheet and from inline attribute.
             // The order is important - the latter styles will override the former.
-            string style = styleFromStylesheet != null ? styleFromStylesheet : null;
+            string style = stylesheet.GetStyle(elementName, sourceContext);
             if (styleInline != null)
             {
-                style = style == null ? styleInline : (style + ";" + styleInline);
+                style = (style == null) ? styleInline : (style + ";" + styleInline);
             }
 
             // Apply local style to current formatting properties
@@ -49,13 +103,11 @@ namespace MarkupConverter.Core
                 string[] styleValues = style.Split(';');
                 for (int i = 0; i < styleValues.Length; i++)
                 {
-                    string[] styleNameValue;
-
-                    styleNameValue = styleValues[i].Split(':');
+                    string[] styleNameValue = styleValues[i].Split(':');
                     if (styleNameValue.Length == 2)
                     {
-                        string styleName = styleNameValue[0].Trim().ToLower();
-                        string styleValue = HtmlToXamlConverter.UnQuote(styleNameValue[1].Trim()).ToLower();
+                        string styleName = styleNameValue[0].Trim().ToLowerInvariant();
+                        string styleValue = HtmlToXamlConverter.UnQuote(styleNameValue[1].Trim()).ToLowerInvariant();
                         int nextIndex = 0;
 
                         switch (styleName)
@@ -67,7 +119,7 @@ namespace MarkupConverter.Core
                                 ParseCssFontFamily(styleValue, ref nextIndex, localProperties);
                                 break;
                             case "font-size":
-                                ParseCssSize(styleValue, ref nextIndex, localProperties, "font-size", /*mustBeNonNegative:*/true);
+                                ParseCssSize(styleValue, ref nextIndex, localProperties, "font-size", mustBeNonNegative: true);
                                 break;
                             case "font-style":
                                 ParseCssFontStyle(styleValue, ref nextIndex, localProperties);
@@ -79,13 +131,13 @@ namespace MarkupConverter.Core
                                 ParseCssFontVariant(styleValue, ref nextIndex, localProperties);
                                 break;
                             case "line-height":
-                                ParseCssSize(styleValue, ref nextIndex, localProperties, "line-height", /*mustBeNonNegative:*/true);
+                                ParseCssSize(styleValue, ref nextIndex, localProperties, "line-height", mustBeNonNegative: true);
                                 break;
                             case "word-spacing":
-                                //  Implement word-spacing conversion
+                                // Implement word-spacing conversion
                                 break;
                             case "letter-spacing":
-                                //  Implement letter-spacing conversion
+                                // Implement letter-spacing conversion
                                 break;
                             case "color":
                                 ParseCssColor(styleValue, ref nextIndex, localProperties, "color");
@@ -114,12 +166,12 @@ namespace MarkupConverter.Core
                                 ParseCssVerticalAlign(styleValue, ref nextIndex, localProperties);
                                 break;
                             case "text-indent":
-                                ParseCssSize(styleValue, ref nextIndex, localProperties, "text-indent", /*mustBeNonNegative:*/false);
+                                ParseCssSize(styleValue, ref nextIndex, localProperties, "text-indent", mustBeNonNegative: false);
                                 break;
 
                             case "width":
                             case "height":
-                                ParseCssSize(styleValue, ref nextIndex, localProperties, styleName, /*mustBeNonNegative:*/true);
+                                ParseCssSize(styleValue, ref nextIndex, localProperties, styleName, mustBeNonNegative: true);
                                 break;
 
                             case "margin": // top/right/bottom/left
@@ -129,7 +181,7 @@ namespace MarkupConverter.Core
                             case "margin-right":
                             case "margin-bottom":
                             case "margin-left":
-                                ParseCssSize(styleValue, ref nextIndex, localProperties, styleName, /*mustBeNonNegative:*/true);
+                                ParseCssSize(styleValue, ref nextIndex, localProperties, styleName, mustBeNonNegative: true);
                                 break;
 
                             case "padding":
@@ -139,7 +191,7 @@ namespace MarkupConverter.Core
                             case "padding-right":
                             case "padding-bottom":
                             case "padding-left":
-                                ParseCssSize(styleValue, ref nextIndex, localProperties, styleName, /*mustBeNonNegative:*/true);
+                                ParseCssSize(styleValue, ref nextIndex, localProperties, styleName, mustBeNonNegative: true);
                                 break;
 
                             case "border":
@@ -154,10 +206,10 @@ namespace MarkupConverter.Core
                             case "border-right":
                             case "border-left":
                             case "border-bottom":
-                                //  Parse css border style
+                                // Parse CSS border style
                                 break;
 
-                            // NOTE: css names for elementary border styles have side indications in the middle (top/bottom/left/right)
+                            // NOTE: CSS names for elementary border styles have side indications in the middle (top/bottom/left/right)
                             // In our internal notation we intentionally put them at the end - to unify processing in ParseCssRectangleProperty method
                             case "border-top-style":
                             case "border-right-style":
@@ -171,11 +223,11 @@ namespace MarkupConverter.Core
                             case "border-right-width":
                             case "border-left-width":
                             case "border-bottom-width":
-                                //  Parse css border style
+                                // Parse CSS border style
                                 break;
 
                             case "display":
-                                //  Implement display style conversion
+                                // Implement display style conversion
                                 break;
 
                             case "float":
@@ -193,16 +245,10 @@ namespace MarkupConverter.Core
             }
         }
 
-        // .................................................................
-        //
-        // Parsing CSS - Lexical Helpers
-        //
-        // .................................................................
-
         // Skips whitespaces in style values
         private static void ParseWhiteSpace(string styleValue, ref int nextIndex)
         {
-            while (nextIndex < styleValue.Length && Char.IsWhiteSpace(styleValue[nextIndex]))
+            while (nextIndex < styleValue.Length && char.IsWhiteSpace(styleValue[nextIndex]))
             {
                 nextIndex++;
             }
@@ -224,7 +270,7 @@ namespace MarkupConverter.Core
                 }
             }
 
-            if (nextIndex + word.Length < styleValue.Length && Char.IsLetterOrDigit(styleValue[nextIndex + word.Length]))
+            if (nextIndex + word.Length < styleValue.Length && char.IsLetterOrDigit(styleValue[nextIndex + word.Length]))
             {
                 return false;
             }
@@ -249,7 +295,7 @@ namespace MarkupConverter.Core
             return null;
         }
 
-        private static void ParseWordEnumeration(string[] words, string styleValue, ref int nextIndex, Hashtable localProperties, string attributeName)
+        private static void ParseWordEnumeration(string[] words, string styleValue, ref int nextIndex, Dictionary<string, string> localProperties, string attributeName)
         {
             string attributeValue = ParseWordEnumeration(words, styleValue, ref nextIndex);
             if (attributeValue != null)
@@ -264,26 +310,21 @@ namespace MarkupConverter.Core
 
             int startIndex = nextIndex;
 
-            // Parse optional munis sign
+            // Parse optional minus sign
             if (nextIndex < styleValue.Length && styleValue[nextIndex] == '-')
             {
                 nextIndex++;
             }
 
-            if (nextIndex < styleValue.Length && Char.IsDigit(styleValue[nextIndex]))
+            if (nextIndex < styleValue.Length && char.IsDigit(styleValue[nextIndex]))
             {
-                while (nextIndex < styleValue.Length && (Char.IsDigit(styleValue[nextIndex]) || styleValue[nextIndex] == '.'))
+                while (nextIndex < styleValue.Length && (char.IsDigit(styleValue[nextIndex]) || styleValue[nextIndex] == '.'))
                 {
                     nextIndex++;
                 }
 
-                string number = styleValue.Substring(startIndex, nextIndex - startIndex);
-
-                string unit = ParseWordEnumeration(_fontSizeUnits, styleValue, ref nextIndex);
-                if (unit == null)
-                {
-                    unit = "px"; // Assuming pixels by default
-                }
+                string number = styleValue[startIndex..nextIndex];
+                string unit = ParseWordEnumeration(FontSizeUnits, styleValue, ref nextIndex) ?? "px"; // Assuming pixels by default
 
                 if (mustBeNonNegative && styleValue[startIndex] == '-')
                 {
@@ -298,7 +339,7 @@ namespace MarkupConverter.Core
             return null;
         }
 
-        private static void ParseCssSize(string styleValue, ref int nextIndex, Hashtable localValues, string propertyName, bool mustBeNonNegative)
+        private static void ParseCssSize(string styleValue, ref int nextIndex, Dictionary<string, string> localValues, string propertyName, bool mustBeNonNegative)
         {
             string length = ParseCssSize(styleValue, ref nextIndex, mustBeNonNegative);
             if (length != null)
@@ -307,40 +348,11 @@ namespace MarkupConverter.Core
             }
         }
 
-        private static readonly string[] _colors = new string[]
-            {
-                "aliceblue", "antiquewhite", "aqua", "aquamarine", "azure", "beige", "bisque", "black", "blanchedalmond",
-                "blue", "blueviolet", "brown", "burlywood", "cadetblue", "chartreuse", "chocolate", "coral",
-                "cornflowerblue", "cornsilk", "crimson", "cyan", "darkblue", "darkcyan", "darkgoldenrod", "darkgray",
-                "darkgreen", "darkkhaki", "darkmagenta", "darkolivegreen", "darkorange", "darkorchid", "darkred",
-                "darksalmon", "darkseagreen", "darkslateblue", "darkslategray", "darkturquoise", "darkviolet", "deeppink",
-                "deepskyblue", "dimgray", "dodgerblue", "firebrick", "floralwhite", "forestgreen", "fuchsia", "gainsboro",
-                "ghostwhite", "gold", "goldenrod", "gray", "green", "greenyellow", "honeydew", "hotpink", "indianred",
-                "indigo", "ivory", "khaki", "lavender", "lavenderblush", "lawngreen", "lemonchiffon", "lightblue", "lightcoral",
-                "lightcyan", "lightgoldenrodyellow", "lightgreen", "lightgrey", "lightpink", "lightsalmon", "lightseagreen",
-                "lightskyblue", "lightslategray", "lightsteelblue", "lightyellow", "lime", "limegreen", "linen", "magenta", 
-                "maroon", "mediumaquamarine", "mediumblue", "mediumorchid", "mediumpurple", "mediumseagreen", "mediumslateblue",
-                "mediumspringgreen", "mediumturquoise", "mediumvioletred", "midnightblue", "mintcream", "mistyrose", "moccasin",
-                "navajowhite", "navy", "oldlace", "olive", "olivedrab", "orange", "orangered", "orchid", "palegoldenrod",
-                "palegreen", "paleturquoise", "palevioletred", "papayawhip", "peachpuff", "peru", "pink", "plum", "powderblue",
-                "purple", "red", "rosybrown", "royalblue", "saddlebrown", "salmon", "sandybrown", "seagreen", "seashell",
-                "sienna", "silver", "skyblue", "slateblue", "slategray", "snow", "springgreen", "steelblue", "tan", "teal",
-                "thistle", "tomato", "turquoise", "violet", "wheat", "white", "whitesmoke", "yellow", "yellowgreen",
-            };
-
-        private static readonly string[] _systemColors = new string[]
-            {
-                "activeborder", "activecaption", "appworkspace", "background", "buttonface", "buttonhighlight", "buttonshadow",
-                "buttontext", "captiontext", "graytext", "highlight", "highlighttext", "inactiveborder", "inactivecaption",
-                "inactivecaptiontext", "infobackground", "infotext", "menu", "menutext", "scrollbar", "threeddarkshadow",
-                "threedface", "threedhighlight", "threedlightshadow", "threedshadow", "window", "windowframe", "windowtext",
-            };
-
         private static string ParseCssColor(string styleValue, ref int nextIndex)
         {
-            //  Implement color parsing
-            // rgb(100%,53.5%,10%)
-            // rgb(255,91,26)
+            // Implement color parsing
+            // RGB(100%,53.5%,10%)
+            // RGB(255,91,26)
             // #FF5B1A
             // black | silver | gray | ... | aqua
             // transparent - for background-color
@@ -358,52 +370,41 @@ namespace MarkupConverter.Core
                     nextIndex++;
                     while (nextIndex < styleValue.Length)
                     {
-                        character = Char.ToUpper(styleValue[nextIndex]);
-                        if (!('0' <= character && character <= '9' || 'A' <= character && character <= 'F'))
+                        character = char.ToUpperInvariant(styleValue[nextIndex]);
+                        if ((character >= '0' && character <= '9') || (character >= 'A' && character <= 'F'))
+                        {
+                            nextIndex++;
+                        }
+                        else
                         {
                             break;
                         }
-                        nextIndex++;
                     }
+
                     if (nextIndex > startIndex + 1)
                     {
-                        color = styleValue.Substring(startIndex, nextIndex - startIndex);
+                        color = styleValue[startIndex..nextIndex];
                     }
                 }
-                //Commented by Sachin for converting rgb color to hex and return
-                /*
-                else if (styleValue.Substring(nextIndex, 3).ToLower() == "rbg")
+
+                // Added by Sachin for converting rgb color to hex and return
+                else if (string.Equals(styleValue.Substring(nextIndex, 3), "rgb", StringComparison.OrdinalIgnoreCase))
                 {
-                    //  Implement real rgb() color parsing
-                    while (nextIndex < styleValue.Length && styleValue[nextIndex] != ')')
-                    {
-                        nextIndex++;
-                    }
-                    if (nextIndex < styleValue.Length)
-                    {
-                        nextIndex++; // to skip ')'
-                    }
-                    color = "gray"; // return bogus color
-                }
-                */
-                //Added by Sachin for converting rgb color to hex and return
-                else if (styleValue.Substring(nextIndex, 3).ToLower() == "rgb")
-                {
-                    //  Implement real rgb() color parsing
+                    // Implement real rgb() color parsing
                     startIndex = 4;
-                    string temp_color = styleValue.Substring(startIndex, styleValue.Length - 1 - startIndex);
+                    string temp_color = styleValue[startIndex..^1];
                     string[] rgb = temp_color.Split(',');
-                    color = "#" + (byte.Parse(rgb[0])).ToString("X2") + (byte.Parse(rgb[1])).ToString("X2") + (byte.Parse(rgb[2])).ToString("X2");
+                    color = "#" + byte.Parse(rgb[0]).ToString("X2") + byte.Parse(rgb[1]).ToString("X2") + byte.Parse(rgb[2]).ToString("X2");
                 }
-                else if (Char.IsLetter(character))
+                else if (char.IsLetter(character))
                 {
-                    color = ParseWordEnumeration(_colors, styleValue, ref nextIndex);
+                    color = ParseWordEnumeration(Colors, styleValue, ref nextIndex);
                     if (color == null)
                     {
-                        color = ParseWordEnumeration(_systemColors, styleValue, ref nextIndex);
+                        color = ParseWordEnumeration(SystemColors, styleValue, ref nextIndex);
                         if (color != null)
                         {
-                            //  Implement smarter system color converions into real colors
+                            // Implement smarter system color conversions into real colors
                             color = "black";
                         }
                     }
@@ -413,7 +414,7 @@ namespace MarkupConverter.Core
             return color;
         }
 
-        private static void ParseCssColor(string styleValue, ref int nextIndex, Hashtable localValues, string propertyName)
+        private static void ParseCssColor(string styleValue, ref int nextIndex, Dictionary<string, string> localValues, string propertyName)
         {
             string color = ParseCssColor(styleValue, ref nextIndex);
             if (color != null)
@@ -422,41 +423,8 @@ namespace MarkupConverter.Core
             }
         }
 
-        // .................................................................
-        //
-        // Pasring CSS font Property
-        //
-        // .................................................................
-
-        // CSS has five font properties: font-family, font-style, font-variant, font-weight, font-size.
-        // An aggregated "font" property lets you specify in one action all the five in combination
-        // with additional line-height property.
-        // 
-        // font-family: [<family-name>,]* [<family-name> | <generic-family>]
-        //    generic-family: serif | sans-serif | monospace | cursive | fantasy
-        //       The list of families sets priorities to choose fonts;
-        //       Quotes not allowed around generic-family names
-        // font-style: normal | italic | oblique
-        // font-variant: normal | small-caps
-        // font-weight: normal | bold | bolder | lighter | 100 ... 900 |
-        //    Default is "normal", normal==400
-        // font-size: <absolute-size> | <relative-size> | <length> | <percentage>
-        //    absolute-size: xx-small | x-small | small | medium | large | x-large | xx-large
-        //    relative-size: larger | smaller
-        //    length: <point> | <pica> | <ex> | <em> | <points> | <millimeters> | <centimeters> | <inches>
-        //    Default: medium
-        // font: [ <font-style> || <font-variant> || <font-weight ]? <font-size> [ / <line-height> ]? <font-family>
-
-        private static readonly string[] _fontGenericFamilies = new string[] { "serif", "sans-serif", "monospace", "cursive", "fantasy" };
-        private static readonly string[] _fontStyles = new string[] { "normal", "italic", "oblique" };
-        private static readonly string[] _fontVariants = new string[] { "normal", "small-caps" };
-        private static readonly string[] _fontWeights = new string[] { "normal", "bold", "bolder", "lighter", "100", "200", "300", "400", "500", "600", "700", "800", "900" };
-        private static readonly string[] _fontAbsoluteSizes = new string[] { "xx-small", "x-small", "small", "medium", "large", "x-large", "xx-large" };
-        private static readonly string[] _fontRelativeSizes = new string[] { "larger", "smaller" };
-        private static readonly string[] _fontSizeUnits = new string[] { "px", "mm", "cm", "in", "pt", "pc", "em", "ex", "%" };
-
-        // Parses CSS string fontStyle representing a value for css font attribute
-        private static void ParseCssFont(string styleValue, Hashtable localProperties)
+        // Parses CSS string fontStyle representing a value for CSS font attribute
+        private static void ParseCssFont(string styleValue, Dictionary<string, string> localProperties)
         {
             int nextIndex = 0;
 
@@ -464,41 +432,41 @@ namespace MarkupConverter.Core
             ParseCssFontVariant(styleValue, ref nextIndex, localProperties);
             ParseCssFontWeight(styleValue, ref nextIndex, localProperties);
 
-            ParseCssSize(styleValue, ref nextIndex, localProperties, "font-size", /*mustBeNonNegative:*/true);
+            ParseCssSize(styleValue, ref nextIndex, localProperties, "font-size", mustBeNonNegative: true);
 
             ParseWhiteSpace(styleValue, ref nextIndex);
             if (nextIndex < styleValue.Length && styleValue[nextIndex] == '/')
             {
                 nextIndex++;
-                ParseCssSize(styleValue, ref nextIndex, localProperties, "line-height", /*mustBeNonNegative:*/true);
+                ParseCssSize(styleValue, ref nextIndex, localProperties, "line-height", mustBeNonNegative: true);
             }
 
             ParseCssFontFamily(styleValue, ref nextIndex, localProperties);
         }
 
-        private static void ParseCssFontStyle(string styleValue, ref int nextIndex, Hashtable localProperties)
+        private static void ParseCssFontStyle(string styleValue, ref int nextIndex, Dictionary<string, string> localProperties)
         {
-            ParseWordEnumeration(_fontStyles, styleValue, ref nextIndex, localProperties, "font-style");
+            ParseWordEnumeration(FontStyles, styleValue, ref nextIndex, localProperties, "font-style");
         }
 
-        private static void ParseCssFontVariant(string styleValue, ref int nextIndex, Hashtable localProperties)
+        private static void ParseCssFontVariant(string styleValue, ref int nextIndex, Dictionary<string, string> localProperties)
         {
-            ParseWordEnumeration(_fontVariants, styleValue, ref nextIndex, localProperties, "font-variant");
+            ParseWordEnumeration(FontVariants, styleValue, ref nextIndex, localProperties, "font-variant");
         }
 
-        private static void ParseCssFontWeight(string styleValue, ref int nextIndex, Hashtable localProperties)
+        private static void ParseCssFontWeight(string styleValue, ref int nextIndex, Dictionary<string, string> localProperties)
         {
-            ParseWordEnumeration(_fontWeights, styleValue, ref nextIndex, localProperties, "font-weight");
+            ParseWordEnumeration(FontWeights, styleValue, ref nextIndex, localProperties, "font-weight");
         }
 
-        private static void ParseCssFontFamily(string styleValue, ref int nextIndex, Hashtable localProperties)
+        private static void ParseCssFontFamily(string styleValue, ref int nextIndex, Dictionary<string, string> localProperties)
         {
             string fontFamilyList = null;
 
             while (nextIndex < styleValue.Length)
             {
                 // Try generic-family
-                string fontFamily = ParseWordEnumeration(_fontGenericFamilies, styleValue, ref nextIndex);
+                string fontFamily = ParseWordEnumeration(FontGenericFamilies, styleValue, ref nextIndex);
 
                 if (fontFamily == null)
                 {
@@ -516,7 +484,7 @@ namespace MarkupConverter.Core
                             nextIndex++;
                         }
 
-                        fontFamily = '"' + styleValue.Substring(startIndex, nextIndex - startIndex) + '"';
+                        fontFamily = '"' + styleValue[startIndex..nextIndex] + '"';
                     }
 
                     if (fontFamily == null)
@@ -530,7 +498,7 @@ namespace MarkupConverter.Core
 
                         if (nextIndex > startIndex)
                         {
-                            fontFamily = styleValue.Substring(startIndex, nextIndex - startIndex).Trim();
+                            fontFamily = styleValue[startIndex..nextIndex].Trim();
                             if (fontFamily.Length == 0)
                             {
                                 fontFamily = null;
@@ -547,19 +515,20 @@ namespace MarkupConverter.Core
 
                 if (fontFamily != null)
                 {
-                    //  css font-family can contein a list of names. We only consider the first name from the list. Need a decision what to do with remaining names
+                    // CSS font-family can contain a list of names. We only consider the first name from the list. Need a decision what to do with remaining names
                     // fontFamilyList = (fontFamilyList == null) ? fontFamily : fontFamilyList + "," + fontFamily;
                     if (fontFamilyList == null && fontFamily.Length > 0)
                     {
                         if (fontFamily[0] == '"' || fontFamily[0] == '\'')
                         {
                             // Unquote the font family name
-                            fontFamily = fontFamily.Substring(1, fontFamily.Length - 2);
+                            fontFamily = fontFamily[1..^1];
                         }
                         else
                         {
-                            // Convert generic css family name
+                            // Convert generic CSS family name
                         }
+
                         fontFamilyList = fontFamily;
                     }
                 }
@@ -575,18 +544,7 @@ namespace MarkupConverter.Core
             }
         }
 
-        // .................................................................
-        //
-        // Pasring CSS list-style Property
-        //
-        // .................................................................
-
-        // list-style: [ <list-style-type> || <list-style-position> || <list-style-image> ]
-
-        private static readonly string[] _listStyleTypes = new string[] { "disc", "circle", "square", "decimal", "lower-roman", "upper-roman", "lower-alpha", "upper-alpha", "none" };
-        private static readonly string[] _listStylePositions = new string[] { "inside", "outside" };
-
-        private static void ParseCssListStyle(string styleValue, Hashtable localProperties)
+        private static void ParseCssListStyle(string styleValue, Dictionary<string, string> localProperties)
         {
             int nextIndex = 0;
 
@@ -623,12 +581,12 @@ namespace MarkupConverter.Core
 
         private static string ParseCssListStyleType(string styleValue, ref int nextIndex)
         {
-            return ParseWordEnumeration(_listStyleTypes, styleValue, ref nextIndex);
+            return ParseWordEnumeration(ListStyleTypes, styleValue, ref nextIndex);
         }
 
         private static string ParseCssListStylePosition(string styleValue, ref int nextIndex)
         {
-            return ParseWordEnumeration(_listStylePositions, styleValue, ref nextIndex);
+            return ParseWordEnumeration(ListStylePositions, styleValue, ref nextIndex);
         }
 
         private static string ParseCssListStyleImage(string styleValue, ref int nextIndex)
@@ -637,133 +595,79 @@ namespace MarkupConverter.Core
             return null;
         }
 
-        // .................................................................
-        //
-        // Pasring CSS text-decorations Property
-        //
-        // .................................................................
-
-        private static readonly string[] _textDecorations = new string[] { "none", "underline", "overline", "line-through", "blink" };
-
-        private static void ParseCssTextDecoration(string styleValue, ref int nextIndex, Hashtable localProperties)
+        private static void ParseCssTextDecoration(string styleValue, ref int nextIndex, Dictionary<string, string> localProperties)
         {
             // Set default text-decorations:none;
-            for (int i = 1; i < _textDecorations.Length; i++)
+            for (int i = 1; i < TextDecorations.Length; i++)
             {
-                localProperties["text-decoration-" + _textDecorations[i]] = "false";
+                localProperties["text-decoration-" + TextDecorations[i]] = "false";
             }
 
             // Parse list of decorations values
             while (nextIndex < styleValue.Length)
             {
-                string decoration = ParseWordEnumeration(_textDecorations, styleValue, ref nextIndex);
+                string decoration = ParseWordEnumeration(TextDecorations, styleValue, ref nextIndex);
                 if (decoration == null || decoration == "none")
                 {
                     break;
                 }
+
                 localProperties["text-decoration-" + decoration] = "true";
             }
         }
 
-        // .................................................................
-        //
-        // Pasring CSS text-transform Property
-        //
-        // .................................................................
-
-        private static readonly string[] _textTransforms = new string[] { "none", "capitalize", "uppercase", "lowercase" };
-
-        private static void ParseCssTextTransform(string styleValue, ref int nextIndex, Hashtable localProperties)
+        private static void ParseCssTextTransform(string styleValue, ref int nextIndex, Dictionary<string, string> localProperties)
         {
-            ParseWordEnumeration(_textTransforms, styleValue, ref nextIndex, localProperties, "text-transform");
+            ParseWordEnumeration(TextTransforms, styleValue, ref nextIndex, localProperties, "text-transform");
         }
 
-        // .................................................................
-        //
-        // Pasring CSS text-align Property
-        //
-        // .................................................................
-
-        private static readonly string[] _textAligns = new string[] { "left", "right", "center", "justify" };
-
-        private static void ParseCssTextAlign(string styleValue, ref int nextIndex, Hashtable localProperties)
+        private static void ParseCssTextAlign(string styleValue, ref int nextIndex, Dictionary<string, string> localProperties)
         {
-            ParseWordEnumeration(_textAligns, styleValue, ref nextIndex, localProperties, "text-align");
+            ParseWordEnumeration(TextAligns, styleValue, ref nextIndex, localProperties, "text-align");
         }
 
-        // .................................................................
-        //
-        // Pasring CSS vertical-align Property
-        //
-        // .................................................................
-
-        private static readonly string[] _verticalAligns = new string[] { "baseline", "sub", "super", "top", "text-top", "middle", "bottom", "text-bottom" };
-
-        private static void ParseCssVerticalAlign(string styleValue, ref int nextIndex, Hashtable localProperties)
+        private static void ParseCssVerticalAlign(string styleValue, ref int nextIndex, Dictionary<string, string> localProperties)
         {
-            //  Parse percentage value for vertical-align style
-            ParseWordEnumeration(_verticalAligns, styleValue, ref nextIndex, localProperties, "vertical-align");
+            // Parse percentage value for vertical-align style
+            ParseWordEnumeration(VerticalAligns, styleValue, ref nextIndex, localProperties, "vertical-align");
         }
 
-        // .................................................................
-        //
-        // Pasring CSS float Property
-        //
-        // .................................................................
-
-        private static readonly string[] _floats = new string[] { "left", "right", "none" };
-
-        private static void ParseCssFloat(string styleValue, ref int nextIndex, Hashtable localProperties)
+        private static void ParseCssFloat(string styleValue, ref int nextIndex, Dictionary<string, string> localProperties)
         {
-            ParseWordEnumeration(_floats, styleValue, ref nextIndex, localProperties, "float");
+            ParseWordEnumeration(Floats, styleValue, ref nextIndex, localProperties, "float");
         }
 
-        // .................................................................
-        //
-        // Pasring CSS clear Property
-        //
-        // .................................................................
-
-        private static readonly string[] _clears = new string[] { "none", "left", "right", "both" };
-
-        private static void ParseCssClear(string styleValue, ref int nextIndex, Hashtable localProperties)
+        private static void ParseCssClear(string styleValue, ref int nextIndex, Dictionary<string, string> localProperties)
         {
-            ParseWordEnumeration(_clears, styleValue, ref nextIndex, localProperties, "clear");
+            ParseWordEnumeration(Clears, styleValue, ref nextIndex, localProperties, "clear");
         }
-
-        // .................................................................
-        //
-        // Pasring CSS margin and padding Properties
-        //
-        // .................................................................
 
         // Generic method for parsing any of four-values properties, such as margin, padding, border-width, border-style, border-color
-        private static bool ParseCssRectangleProperty(string styleValue, ref int nextIndex, Hashtable localProperties, string propertyName)
+        private static bool ParseCssRectangleProperty(string styleValue, ref int nextIndex, Dictionary<string, string> localProperties, string propertyName)
         {
-            // CSS Spec: 
+            // CSS Spec:
             // If only one value is set, then the value applies to all four sides;
-            // If two or three values are set, then missinng value(s) are taken fromm the opposite side(s).
+            // If two or three values are set, then missing value(s) are taken from the opposite side(s).
             // The order they are applied is: top/right/bottom/left
-
             Debug.Assert(propertyName == "margin" || propertyName == "padding" || propertyName == "border-width" || propertyName == "border-style" || propertyName == "border-color");
 
-            string value = propertyName == "border-color" ? ParseCssColor(styleValue, ref nextIndex) : propertyName == "border-style" ? ParseCssBorderStyle(styleValue, ref nextIndex) : ParseCssSize(styleValue, ref nextIndex, /*mustBeNonNegative:*/true);
+            string value = propertyName == "border-color" ? ParseCssColor(styleValue, ref nextIndex) : propertyName == "border-style" ? ParseCssBorderStyle(styleValue, ref nextIndex) : ParseCssSize(styleValue, ref nextIndex, mustBeNonNegative: true);
             if (value != null)
             {
                 localProperties[propertyName + "-top"] = value;
                 localProperties[propertyName + "-bottom"] = value;
                 localProperties[propertyName + "-right"] = value;
                 localProperties[propertyName + "-left"] = value;
-                value = propertyName == "border-color" ? ParseCssColor(styleValue, ref nextIndex) : propertyName == "border-style" ? ParseCssBorderStyle(styleValue, ref nextIndex) : ParseCssSize(styleValue, ref nextIndex, /*mustBeNonNegative:*/true);
+                value = propertyName == "border-color" ? ParseCssColor(styleValue, ref nextIndex) : propertyName == "border-style" ? ParseCssBorderStyle(styleValue, ref nextIndex) : ParseCssSize(styleValue, ref nextIndex, mustBeNonNegative: true);
                 if (value != null)
                 {
                     localProperties[propertyName + "-right"] = value;
                     localProperties[propertyName + "-left"] = value;
-                    value = propertyName == "border-color" ? ParseCssColor(styleValue, ref nextIndex) : propertyName == "border-style" ? ParseCssBorderStyle(styleValue, ref nextIndex) : ParseCssSize(styleValue, ref nextIndex, /*mustBeNonNegative:*/true);
+                    value = propertyName == "border-color" ? ParseCssColor(styleValue, ref nextIndex) : propertyName == "border-style" ? ParseCssBorderStyle(styleValue, ref nextIndex) : ParseCssSize(styleValue, ref nextIndex, mustBeNonNegative: true);
                     if (value != null)
                     {
                         localProperties[propertyName + "-bottom"] = value;
-                        value = propertyName == "border-color" ? ParseCssColor(styleValue, ref nextIndex) : propertyName == "border-style" ? ParseCssBorderStyle(styleValue, ref nextIndex) : ParseCssSize(styleValue, ref nextIndex, /*mustBeNonNegative:*/true);
+                        value = propertyName == "border-color" ? ParseCssColor(styleValue, ref nextIndex) : propertyName == "border-style" ? ParseCssBorderStyle(styleValue, ref nextIndex) : ParseCssSize(styleValue, ref nextIndex, mustBeNonNegative: true);
                         if (value != null)
                         {
                             localProperties[propertyName + "-left"] = value;
@@ -777,15 +681,8 @@ namespace MarkupConverter.Core
             return false;
         }
 
-        // .................................................................
-        //
-        // Pasring CSS border Properties
-        //
-        // .................................................................
-
         // border: [ <border-width> || <border-style> || <border-color> ]
-
-        private static void ParseCssBorder(string styleValue, ref int nextIndex, Hashtable localProperties)
+        private static void ParseCssBorder(string styleValue, ref int nextIndex, Dictionary<string, string> localProperties)
         {
             while (
                 ParseCssRectangleProperty(styleValue, ref nextIndex, localProperties, "border-width") ||
@@ -795,280 +692,14 @@ namespace MarkupConverter.Core
             }
         }
 
-        // .................................................................
-        //
-        // Pasring CSS border-style Propertie
-        //
-        // .................................................................
-
-        private static readonly string[] _borderStyles = new string[] { "none", "dotted", "dashed", "solid", "double", "groove", "ridge", "inset", "outset" };
-
         private static string ParseCssBorderStyle(string styleValue, ref int nextIndex)
         {
-            return ParseWordEnumeration(_borderStyles, styleValue, ref nextIndex);
+            return ParseWordEnumeration(BorderStyles, styleValue, ref nextIndex);
         }
 
-
-        // .................................................................
-        //
-        //  What are these definitions doing here:
-        //
-        // .................................................................
-
-        private static string[] _blocks = new string[] { "block", "inline", "list-item", "none" };
-
-        // .................................................................
-        //
-        // Pasring CSS Background Properties
-        //
-        // .................................................................
-
-        private static void ParseCssBackground(string styleValue, ref int nextIndex, Hashtable localValues)
+        private static void ParseCssBackground(string styleValue, ref int nextIndex, Dictionary<string, string> localValues)
         {
-            //  Implement parsing background attribute
+            // Implement parsing background attribute
         }
-    }
-
-
-    internal class CssStylesheet
-    {
-        // Constructor
-        public CssStylesheet(XmlElement htmlElement)
-        {
-            if (htmlElement != null)
-            {
-                this.DiscoverStyleDefinitions(htmlElement);
-            }
-        }
-
-        // Recursively traverses an html tree, discovers STYLE elements and creates a style definition table
-        // for further cascading style application
-        public void DiscoverStyleDefinitions(XmlElement htmlElement)
-        {
-            if (htmlElement.LocalName.ToLower() == "link")
-            {
-                return;
-                //  Add LINK elements processing for included stylesheets
-                // <LINK href="http://sc.msn.com/global/css/ptnr/orange.css" type=text/css \r\nrel=stylesheet>
-            }
-
-            if (htmlElement.LocalName.ToLower() != "style")
-            {
-                // This is not a STYLE element. Recurse into it
-                for (XmlNode htmlChildNode = htmlElement.FirstChild; htmlChildNode != null; htmlChildNode = htmlChildNode.NextSibling)
-                {
-                    if (htmlChildNode is XmlElement)
-                    {
-                        this.DiscoverStyleDefinitions((XmlElement)htmlChildNode);
-                    }
-                }
-                return;
-            }
-
-            // Add style definitions from this style.
-
-            // Collect all text from this style definition
-            StringBuilder stylesheetBuffer = new StringBuilder();
-
-            for (XmlNode htmlChildNode = htmlElement.FirstChild; htmlChildNode != null; htmlChildNode = htmlChildNode.NextSibling)
-            {
-                if (htmlChildNode is XmlText || htmlChildNode is XmlComment)
-                {
-                    stylesheetBuffer.Append(RemoveComments(htmlChildNode.Value));
-                }
-            }
-
-            // CssStylesheet has the following syntactical structure:
-            //     @import declaration;
-            //     selector { definition }
-            // where "selector" is one of: ".classname", "tagname"
-            // It can contain comments in the following form: /*...*/
-
-            int nextCharacterIndex = 0;
-            while (nextCharacterIndex < stylesheetBuffer.Length)
-            {
-                // Extract selector
-                int selectorStart = nextCharacterIndex;
-                while (nextCharacterIndex < stylesheetBuffer.Length && stylesheetBuffer[nextCharacterIndex] != '{')
-                {
-                    // Skip declaration directive starting from @
-                    if (stylesheetBuffer[nextCharacterIndex] == '@')
-                    {
-                        while (nextCharacterIndex < stylesheetBuffer.Length && stylesheetBuffer[nextCharacterIndex] != ';')
-                        {
-                            nextCharacterIndex++;
-                        }
-                        selectorStart = nextCharacterIndex + 1;
-                    }
-                    nextCharacterIndex++;
-                }
-
-                if (nextCharacterIndex < stylesheetBuffer.Length)
-                {
-                    // Extract definition
-                    int definitionStart = nextCharacterIndex;
-                    while (nextCharacterIndex < stylesheetBuffer.Length && stylesheetBuffer[nextCharacterIndex] != '}')
-                    {
-                        nextCharacterIndex++;
-                    }
-
-                    // Define a style
-                    if (nextCharacterIndex - definitionStart > 2)
-                    {
-                        this.AddStyleDefinition(
-                            stylesheetBuffer.ToString(selectorStart, definitionStart - selectorStart),
-                            stylesheetBuffer.ToString(definitionStart + 1, nextCharacterIndex - definitionStart - 2));
-                    }
-
-                    // Skip closing brace
-                    if (nextCharacterIndex < stylesheetBuffer.Length)
-                    {
-                        Debug.Assert(stylesheetBuffer[nextCharacterIndex] == '}');
-                        nextCharacterIndex++;
-                    }
-                }
-            }
-        }
-
-        // Returns a string with all c-style comments replaced by spaces
-        private string RemoveComments(string text)
-        {
-            int commentStart = text.IndexOf("/*");
-            if (commentStart < 0)
-            {
-                return text;
-            }
-
-            int commentEnd = text.IndexOf("*/", commentStart + 2);
-            if (commentEnd < 0)
-            {
-                return text.Substring(0, commentStart);
-            }
-
-            return text.Substring(0, commentStart) + " " + RemoveComments(text.Substring(commentEnd + 2));
-        }
-
-
-        public void AddStyleDefinition(string selector, string definition)
-        {
-            // Notrmalize parameter values
-            selector = selector.Trim().ToLower();
-            definition = definition.Trim().ToLower();
-            if (selector.Length == 0 || definition.Length == 0)
-            {
-                return;
-            }
-
-            if (_styleDefinitions == null)
-            {
-                _styleDefinitions = new List<StyleDefinition>();
-            }
-
-            string[] simpleSelectors = selector.Split(',');
-
-            for (int i = 0; i < simpleSelectors.Length; i++)
-            {
-                string simpleSelector = simpleSelectors[i].Trim();
-                if (simpleSelector.Length > 0)
-                {
-                    _styleDefinitions.Add(new StyleDefinition(simpleSelector, definition));
-                }
-            }
-        }
-
-        public string GetStyle(string elementName, List<XmlElement> sourceContext)
-        {
-            Debug.Assert(sourceContext.Count > 0);
-            Debug.Assert(elementName == sourceContext[sourceContext.Count - 1].LocalName);
-
-            //  Add id processing for style selectors
-            if (_styleDefinitions != null)
-            {
-                for (int i = _styleDefinitions.Count - 1; i >= 0;  i--)
-                {
-                    string selector = _styleDefinitions[i].Selector;
-
-                    string[] selectorLevels = selector.Split(' ');
-
-                    int indexInSelector = selectorLevels.Length - 1;
-                    int indexInContext = sourceContext.Count - 1;
-                    string selectorLevel = selectorLevels[indexInSelector].Trim();
-
-                    if (MatchSelectorLevel(selectorLevel, sourceContext[sourceContext.Count - 1]))
-                    {
-                        return _styleDefinitions[i].Definition;
-                    }
-                }
-            }
-
-            return null;
-        }
-
-        private bool MatchSelectorLevel(string selectorLevel, XmlElement xmlElement)
-        {
-            if (selectorLevel.Length == 0)
-            {
-                return false;
-            }
-
-            int indexOfDot = selectorLevel.IndexOf('.');
-            int indexOfPound = selectorLevel.IndexOf('#');
-
-            string selectorClass = null;
-            string selectorId = null;
-            string selectorTag = null;
-            if (indexOfDot >= 0)
-            {
-                if (indexOfDot > 0)
-                {
-                    selectorTag = selectorLevel.Substring(0, indexOfDot);
-                }
-                selectorClass = selectorLevel.Substring(indexOfDot + 1);
-            }
-            else if (indexOfPound >= 0)
-            {
-                if (indexOfPound > 0)
-                {
-                    selectorTag = selectorLevel.Substring(0, indexOfPound);
-                }
-                selectorId = selectorLevel.Substring(indexOfPound + 1);
-            }
-            else
-            {
-                selectorTag = selectorLevel;
-            }
-
-            if (selectorTag != null && selectorTag != xmlElement.LocalName)
-            {
-                return false;
-            }
-
-            if (selectorId != null && HtmlToXamlConverter.GetAttribute(xmlElement, "id") != selectorId)
-            {
-                return false;
-            }
-
-            if (selectorClass != null && HtmlToXamlConverter.GetAttribute(xmlElement, "class") != selectorClass)
-            {
-                return false;
-            }
-
-            return true;
-        }
-
-        private class StyleDefinition
-        {
-            public StyleDefinition(string selector, string definition)
-            {
-                this.Selector = selector;
-                this.Definition = definition;
-            }
-
-            public string Selector;
-
-            public string Definition;
-        }
-
-        private List<StyleDefinition> _styleDefinitions;
     }
 }

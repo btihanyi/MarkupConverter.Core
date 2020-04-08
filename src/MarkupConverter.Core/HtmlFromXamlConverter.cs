@@ -1,107 +1,88 @@
 ﻿//---------------------------------------------------------------------------
-// 
+//
 // File: HtmlFromXamlConverter.cs
 //
 // Copyright (C) Microsoft Corporation.  All rights reserved.
 //
-// Description: Prototype for Xaml - Html conversion 
+// Description: Prototype for Xaml - HTML conversion
 //
 //---------------------------------------------------------------------------
 
+using System;
+using System.Diagnostics;
+using System.Globalization;
+using System.IO;
+using System.Text;
+using System.Xml;
+
 namespace MarkupConverter.Core
 {
-    using System;
-    using System.Diagnostics;
-    using System.Text;
-    using System.IO;
-    using System.Xml;
-
     /// <summary>
     /// HtmlToXamlConverter is a static class that takes an HTML string
-    /// and converts it into XAML
+    /// and converts it into XAML.
     /// </summary>
     public static class HtmlFromXamlConverter
     {
-        // ---------------------------------------------------------------------
-        //
-        // Internal Methods
-        //
-        // ---------------------------------------------------------------------
-
-        #region Internal Methods
-
         /// <summary>
-        /// Main entry point for Xaml-to-Html converter.
-        /// Converts a xaml string into html string.
+        /// Main entry point for XAML-to-HTML converter.
+        /// Converts a XAML string into HTML string.
         /// </summary>
         /// <param name="xamlString">
-        /// Xaml strinng to convert.
+        /// XAML string to convert.
         /// </param>
+        /// <param name="asFullDocument"></param>
         /// <returns>
-        /// Html string produced from a source xaml.
+        /// HTML string produced from a source XAML.
         /// </returns>
         public static string ConvertXamlToHtml(string xamlString, bool asFullDocument)
         {
-            XmlTextReader xamlReader;
-            StringBuilder htmlStringBuilder;
-            XmlTextWriter htmlWriter;
+            using var xamlReader = new XmlTextReader(new StringReader(xamlString));
+            var htmlStringBuilder = new StringBuilder(100);
+            using var htmlWriter = new XmlTextWriter(new StringWriter(htmlStringBuilder));
 
-            xamlReader = new XmlTextReader(new StringReader(xamlString));
-
-            htmlStringBuilder = new StringBuilder(100);
-            htmlWriter = new XmlTextWriter(new StringWriter(htmlStringBuilder));
-
-            if (!WriteFlowDocument(xamlReader, htmlWriter, asFullDocument))
+            if (WriteFlowDocument(xamlReader, htmlWriter, asFullDocument))
             {
-                return "";
+                return htmlStringBuilder.ToString();
             }
-
-            string htmlString = htmlStringBuilder.ToString();
-
-            return htmlString;
+            else
+            {
+                return string.Empty;
+            }
         }
 
-        #endregion Internal Methods
-
-        // ---------------------------------------------------------------------
-        //
-        // Private Methods
-        //
-        // ---------------------------------------------------------------------
-
-        #region Private Methods
         /// <summary>
         /// Processes a root level element of XAML (normally it's FlowDocument element).
         /// </summary>
         /// <param name="xamlReader">
-        /// XmlTextReader for a source xaml.
+        /// XmlTextReader for a source XAML.
         /// </param>
         /// <param name="htmlWriter">
-        /// XmlTextWriter producing resulting html
+        /// XmlTextWriter producing resulting HTML.
         /// </param>
         private static bool WriteFlowDocument(XmlTextReader xamlReader, XmlTextWriter htmlWriter, bool asFullDocument)
         {
             if (!ReadNextToken(xamlReader))
             {
-                // Xaml content is empty - nothing to convert
+                // XAML content is empty - nothing to convert
                 return false;
             }
 
             if (xamlReader.NodeType != XmlNodeType.Element || xamlReader.Name != "FlowDocument")
             {
-                // Root FlowDocument elemet is missing
+                // Root FlowDocument element is missing
                 return false;
             }
 
-            // Create a buffer StringBuilder for collecting css properties for inline STYLE attributes
+            // Create a buffer StringBuilder for collecting CSS properties for inline STYLE attributes
             // on every element level (it will be re-initialized on every level).
-            StringBuilder inlineStyle = new StringBuilder();
+            var inlineStyle = new StringBuilder();
 
             if (asFullDocument)
             {
                 htmlWriter.WriteStartElement("HTML");
                 htmlWriter.WriteStartElement("BODY");
             }
+
             WriteFormattingProperties(xamlReader, htmlWriter, inlineStyle);
 
             WriteElementContent(xamlReader, htmlWriter, inlineStyle);
@@ -111,12 +92,13 @@ namespace MarkupConverter.Core
                 htmlWriter.WriteEndElement();
                 htmlWriter.WriteEndElement();
             }
+
             return true;
         }
 
         /// <summary>
-        /// Reads attributes of the current xaml element and converts
-        /// them into appropriate html attributes or css styles.
+        /// Reads attributes of the current XAML element and converts
+        /// them into appropriate HTML attributes or CSS styles.
         /// </summary>
         /// <param name="xamlReader">
         /// XmlTextReader which is expected to be at XmlNodeType.Element
@@ -124,11 +106,11 @@ namespace MarkupConverter.Core
         /// The reader will remain at the same level after function complete.
         /// </param>
         /// <param name="htmlWriter">
-        /// XmlTextWriter for output html, which is expected to be in
+        /// XmlTextWriter for output HTML, which is expected to be in
         /// after WriteStartElement state.
         /// </param>
         /// <param name="inlineStyle">
-        /// String builder for collecting css properties for inline STYLE attribute.
+        /// String builder for collecting CSS properties for inline STYLE attribute.
         /// </param>
         private static void WriteFormattingProperties(XmlTextReader xamlReader, XmlTextWriter htmlWriter, StringBuilder inlineStyle)
         {
@@ -150,8 +132,7 @@ namespace MarkupConverter.Core
 
                 switch (xamlReader.Name)
                 {
-                    // Character fomatting properties
-                    // ------------------------------
+                    // Character formatting properties
                     case "Background":
                         css = "background-color:" + ParseXamlColor(xamlReader.Value) + ";";
                         break;
@@ -159,10 +140,10 @@ namespace MarkupConverter.Core
                         css = "font-family:" + xamlReader.Value + ";";
                         break;
                     case "FontStyle":
-                        css = "font-style:" + xamlReader.Value.ToLower() + ";";
+                        css = "font-style:" + xamlReader.Value.ToLowerInvariant() + ";";
                         break;
                     case "FontWeight":
-                        css = "font-weight:" + xamlReader.Value.ToLower() + ";";
+                        css = "font-weight:" + xamlReader.Value.ToLowerInvariant() + ";";
                         break;
                     case "FontStretch":
                         break;
@@ -173,10 +154,14 @@ namespace MarkupConverter.Core
                         css = "color:" + ParseXamlColor(xamlReader.Value) + ";";
                         break;
                     case "TextDecorations":
-                        if (xamlReader.Value.ToLower() == "strikethrough")
+                        if (string.Equals(xamlReader.Value, "strikethrough", StringComparison.OrdinalIgnoreCase))
+                        {
                             css = "text-decoration:line-through;";
+                        }
                         else
+                        {
                             css = "text-decoration:underline;";
+                        }
                         break;
                     case "TextEffects":
                         break;
@@ -192,7 +177,6 @@ namespace MarkupConverter.Core
                         break;
 
                     // Paragraph formatting properties
-                    // -------------------------------
                     case "Padding":
                         css = "padding:" + ParseXamlThickness(xamlReader.Value) + ";";
                         break;
@@ -268,9 +252,10 @@ namespace MarkupConverter.Core
         {
             if (color.StartsWith("#"))
             {
-                // Remove transparancy value
+                // Remove transparency value
                 color = "#" + color.Substring(3);
             }
+
             return color;
         }
 
@@ -280,8 +265,7 @@ namespace MarkupConverter.Core
 
             for (int i = 0; i < values.Length; i++)
             {
-                double value;
-                if (double.TryParse(values[i], out value))
+                if (double.TryParse(values[i], NumberStyles.Float, CultureInfo.InvariantCulture, out double value))
                 {
                     values[i] = Math.Ceiling(value).ToString();
                 }
@@ -291,39 +275,28 @@ namespace MarkupConverter.Core
                 }
             }
 
-            string cssThickness;
-            switch (values.Length)
+            return values.Length switch
             {
-                case 1:
-                    cssThickness = thickness;
-                    break;
-                case 2:
-                    cssThickness = values[1] + " " + values[0];
-                    break;
-                case 4:
-                    cssThickness = values[1] + " " + values[2] + " " + values[3] + " " + values[0];
-                    break;
-                default:
-                    cssThickness = values[0];
-                    break;
-            }
-
-            return cssThickness;
+                1 => thickness,
+                2 => values[1] + " " + values[0],
+                4 => values[1] + " " + values[2] + " " + values[3] + " " + values[0],
+                _ => values[0],
+            };
         }
 
         /// <summary>
-        /// Reads a content of current xaml element, converts it
+        /// Reads a content of current XAML element, converts it.
         /// </summary>
         /// <param name="xamlReader">
         /// XmlTextReader which is expected to be at XmlNodeType.Element
         /// (opening element tag) position.
         /// </param>
         /// <param name="htmlWriter">
-        /// May be null, in which case we are skipping the xaml element;
-        /// witout producing any output to html.
+        /// May be null, in which case we are skipping the XAML element;
+        /// without producing any output to HTML.
         /// </param>
         /// <param name="inlineStyle">
-        /// StringBuilder used for collecting css properties for inline STYLE attribute.
+        /// StringBuilder used for collecting CSS properties for inline STYLE attribute.
         /// </param>
         private static void WriteElementContent(XmlTextReader xamlReader, XmlTextWriter htmlWriter, StringBuilder inlineStyle)
         {
@@ -339,7 +312,6 @@ namespace MarkupConverter.Core
                     htmlWriter.WriteAttributeString("STYLE", inlineStyle.ToString());
                     inlineStyle.Remove(0, inlineStyle.Length);
                 }
-                elementContentStarted = true;
             }
             else
             {
@@ -360,11 +332,15 @@ namespace MarkupConverter.Core
                                     htmlWriter.WriteAttributeString("STYLE", inlineStyle.ToString());
                                     inlineStyle.Remove(0, inlineStyle.Length);
                                 }
+
                                 elementContentStarted = true;
                                 WriteElement(xamlReader, htmlWriter, inlineStyle);
                             }
-                            Debug.Assert(xamlReader.NodeType == XmlNodeType.EndElement || xamlReader.NodeType == XmlNodeType.Element && xamlReader.IsEmptyElement);
+
+                            Debug.Assert(xamlReader.NodeType == XmlNodeType.EndElement ||
+                                         (xamlReader.NodeType == XmlNodeType.Element && xamlReader.IsEmptyElement));
                             break;
+
                         case XmlNodeType.Comment:
                             if (htmlWriter != null)
                             {
@@ -372,10 +348,13 @@ namespace MarkupConverter.Core
                                 {
                                     htmlWriter.WriteAttributeString("STYLE", inlineStyle.ToString());
                                 }
+
                                 htmlWriter.WriteComment(xamlReader.Value);
                             }
+
                             elementContentStarted = true;
                             break;
+
                         case XmlNodeType.CDATA:
                         case XmlNodeType.Text:
                         case XmlNodeType.SignificantWhitespace:
@@ -385,8 +364,10 @@ namespace MarkupConverter.Core
                                 {
                                     htmlWriter.WriteAttributeString("STYLE", inlineStyle.ToString());
                                 }
+
                                 htmlWriter.WriteString(xamlReader.Value);
                             }
+
                             elementContentStarted = true;
                             break;
                     }
@@ -397,7 +378,7 @@ namespace MarkupConverter.Core
         }
 
         /// <summary>
-        /// Conberts an element notation of complex property into
+        /// Converts an element notation of complex property into.
         /// </summary>
         /// <param name="xamlReader">
         /// On entry this XmlTextReader must be on Element start tag;
@@ -416,22 +397,22 @@ namespace MarkupConverter.Core
             }
 
             // Skip the element representing the complex property
-            WriteElementContent(xamlReader, /*htmlWriter:*/null, /*inlineStyle:*/null);
+            WriteElementContent(xamlReader, htmlWriter: null, inlineStyle: null);
         }
 
         /// <summary>
-        /// Converts a xaml element into an appropriate html element.
+        /// Converts a XAML element into an appropriate HTML element.
         /// </summary>
         /// <param name="xamlReader">
         /// On entry this XmlTextReader must be on Element start tag;
         /// on exit - on EndElement tag.
         /// </param>
         /// <param name="htmlWriter">
-        /// May be null, in which case we are skipping xaml content
-        /// without producing any html output
+        /// May be null, in which case we are skipping XAML content
+        /// without producing any HTML output.
         /// </param>
         /// <param name="inlineStyle">
-        /// StringBuilder used for collecting css properties for inline STYLE attributes on every level.
+        /// StringBuilder used for collecting CSS properties for inline STYLE attributes on every level.
         /// </param>
         private static void WriteElement(XmlTextReader xamlReader, XmlTextWriter htmlWriter, StringBuilder inlineStyle)
         {
@@ -439,34 +420,29 @@ namespace MarkupConverter.Core
 
             if (htmlWriter == null)
             {
-                // Skipping mode; recurse into the xaml element without any output
-                WriteElementContent(xamlReader, /*htmlWriter:*/null, null);
+                // Skipping mode; recurse into the XAML element without any output
+                WriteElementContent(xamlReader, htmlWriter: null, null);
             }
             else
             {
-                string htmlElementName = null;
-
+                string htmlElementName;
                 switch (xamlReader.Name)
                 {
-                    case "Run" :
+                    case "Run":
                     case "Span":
-                        htmlElementName = "SPAN";
-                        break;
                     case "InlineUIContainer":
                         htmlElementName = "SPAN";
                         break;
                     case "Bold":
                         htmlElementName = "B";
                         break;
-                    case "Italic" :
+                    case "Italic":
                         htmlElementName = "I";
                         break;
-                    case "Paragraph" :
+                    case "Paragraph":
                         htmlElementName = "P";
                         break;
                     case "BlockUIContainer":
-                        htmlElementName = "DIV";
-                        break;
                     case "Section":
                         htmlElementName = "DIV";
                         break;
@@ -476,16 +452,16 @@ namespace MarkupConverter.Core
                     case "TableColumn":
                         htmlElementName = "COL";
                         break;
-                    case "TableRowGroup" :
+                    case "TableRowGroup":
                         htmlElementName = "TBODY";
                         break;
-                    case "TableRow" :
+                    case "TableRow":
                         htmlElementName = "TR";
                         break;
-                    case "TableCell" :
+                    case "TableCell":
                         htmlElementName = "TD";
                         break;
-                    case "List" :
+                    case "List":
                         string marker = xamlReader.GetAttribute("MarkerStyle");
                         if (marker == null || marker == "None" || marker == "Disc" || marker == "Circle" || marker == "Square" || marker == "Box")
                         {
@@ -496,13 +472,13 @@ namespace MarkupConverter.Core
                             htmlElementName = "OL";
                         }
                         break;
-                    case "ListItem" :
+                    case "ListItem":
                         htmlElementName = "LI";
                         break;
                     case "Hyperlink":
                         htmlElementName = "A";
                         break;
-                    default :
+                    default:
                         htmlElementName = null; // Ignore the element
                         break;
                 }
@@ -519,15 +495,15 @@ namespace MarkupConverter.Core
                 }
                 else
                 {
-                    // Skip this unrecognized xaml element
-                    WriteElementContent(xamlReader, /*htmlWriter:*/null, null);
+                    // Skip this unrecognized XAML element
+                    WriteElementContent(xamlReader, htmlWriter: null, null);
                 }
             }
         }
 
         // Reader advance helpers
-		// ----------------------
-				 
+        // ----------------------
+
         /// <summary>
         /// Reads several items from xamlReader skipping all non-significant stuff.
         /// </summary>
@@ -537,60 +513,50 @@ namespace MarkupConverter.Core
         /// <returns>
         /// True if new token is available; false if end of stream reached.
         /// </returns>
-		private static bool ReadNextToken(XmlReader xamlReader)
-		{
-			while (xamlReader.Read())
-			{
-				Debug.Assert(xamlReader.ReadState == ReadState.Interactive, "Reader is expected to be in Interactive state (" + xamlReader.ReadState + ")");
-				switch (xamlReader.NodeType)
-				{
-				    case XmlNodeType.Element: 
-				    case XmlNodeType.EndElement:
-				    case XmlNodeType.None:
-				    case XmlNodeType.CDATA:
-				    case XmlNodeType.Text:
-				    case XmlNodeType.SignificantWhitespace:
-					    return true;
+        private static bool ReadNextToken(XmlReader xamlReader)
+        {
+            while (xamlReader.Read())
+            {
+                Debug.Assert(xamlReader.ReadState == ReadState.Interactive, "Reader is expected to be in Interactive state (" + xamlReader.ReadState + ")");
+                switch (xamlReader.NodeType)
+                {
+                    case XmlNodeType.Element:
+                    case XmlNodeType.EndElement:
+                    case XmlNodeType.None:
+                    case XmlNodeType.CDATA:
+                    case XmlNodeType.Text:
+                    case XmlNodeType.SignificantWhitespace:
+                        return true;
 
-				    case XmlNodeType.Whitespace:
-					    if (xamlReader.XmlSpace == XmlSpace.Preserve)
-					    {
-						    return true;
-					    }
-					    // ignore insignificant whitespace
-					    break;
+                    case XmlNodeType.Whitespace:
+                        if (xamlReader.XmlSpace == XmlSpace.Preserve)
+                        {
+                            return true;
+                        }
 
-				    case XmlNodeType.EndEntity:
-				    case XmlNodeType.EntityReference:
-                        //  Implement entity reading
-					    //xamlReader.ResolveEntity();
-					    //xamlReader.Read();
-					    //ReadChildNodes( parent, parentBaseUri, xamlReader, positionInfo);
+                        // ignore insignificant whitespace
+                        break;
+
+                    case XmlNodeType.EndEntity:
+                    case XmlNodeType.EntityReference:
+                        // Implement entity reading
+                        // xamlReader.ResolveEntity();
+                        // xamlReader.Read();
+                        // ReadChildNodes( parent, parentBaseUri, xamlReader, positionInfo);
                         break; // for now we ignore entities as insignificant stuff
 
                     case XmlNodeType.Comment:
                         return true;
                     case XmlNodeType.ProcessingInstruction:
-				    case XmlNodeType.DocumentType:
-				    case XmlNodeType.XmlDeclaration:
-				    default:
-					    // Ignorable stuff
-					    break;
-				}
+                    case XmlNodeType.DocumentType:
+                    case XmlNodeType.XmlDeclaration:
+                    default:
+                        // Ignorable stuff
+                        break;
+                }
             }
+
             return false;
         }
-
-        #endregion Private Methods
-
-        // ---------------------------------------------------------------------
-        //
-        // Private Fields
-        //
-        // ---------------------------------------------------------------------
-
-        #region Private Fields
-
-        #endregion Private Fields
     }
 }

@@ -4,7 +4,7 @@
     <PackageId>MarkupConverter.Core</PackageId>
     <TargetFramework>netcoreapp3.0</TargetFramework>
     <UseWPF>true</UseWPF>
-    <Authors>mmanela;btihanyi</Authors>
+    <Authors>Matthew Manela;Balazs Tihanyi</Authors>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <Company>Balazs Tihanyi</Company>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
@@ -13,5 +13,14 @@
     <RepositoryUrl>https://github.com/btihanyi/MarkupConverter.Core.git</RepositoryUrl>
     <PackageTags>RTF;HTML;Converter</PackageTags>
   </PropertyGroup>
+
+  <PropertyGroup>
+    <CodeAnalysisRuleSet>MarkupConverter.Core.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="StyleCop.Analyzers" Version="1.1.118" />
+    <PackageReference Include="Roslynator.Analyzers" Version="2.3.0" />
+  </ItemGroup>
 
 </Project>

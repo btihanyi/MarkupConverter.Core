@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using System.Windows;
 using System.Windows.Documents;
 
@@ -6,52 +7,44 @@ namespace MarkupConverter.Core
 {
     public static class RtfToHtmlConverter
     {
-        private const string FlowDocumentFormat = "<FlowDocument>{0}</FlowDocument>";
-
         public static string ConvertRtfToHtml(string rtfText)
         {
-            var xamlText = string.Format(FlowDocumentFormat, ConvertRtfToXaml(rtfText));
+            string xamlText = $"<FlowDocument>{ConvertRtfToXaml(rtfText)}</FlowDocument>";
 
-            return HtmlFromXamlConverter.ConvertXamlToHtml(xamlText, false);
+            return HtmlFromXamlConverter.ConvertXamlToHtml(xamlText, asFullDocument: false);
         }
 
         private static string ConvertRtfToXaml(string rtfText)
         {
+            if (string.IsNullOrEmpty(rtfText))
+            {
+                return string.Empty;
+            }
 
-            if (string.IsNullOrEmpty(rtfText)) return "";
             var flowDocument = new FlowDocument();
             var textRange = new TextRange(flowDocument.ContentStart, flowDocument.ContentEnd);
-            //Create a MemoryStream of the Rtf content
 
+            // Create a MemoryStream of the RTF content
             using (var rtfMemoryStream = new MemoryStream())
+            using (var rtfStreamWriter = new StreamWriter(rtfMemoryStream))
             {
-                using (var rtfStreamWriter = new StreamWriter(rtfMemoryStream))
-                {
-                    rtfStreamWriter.Write(rtfText);
-                    rtfStreamWriter.Flush();
-                    rtfMemoryStream.Seek(0, SeekOrigin.Begin);
+                rtfStreamWriter.Write(rtfText);
+                rtfStreamWriter.Flush();
+                rtfMemoryStream.Position = 0;
 
-                    //Load the MemoryStream into TextRange ranging from start to end of RichTextBox.
-                    textRange.Load(rtfMemoryStream, DataFormats.Rtf);
-                }
+                // Load the MemoryStream into TextRange ranging from start to end of RichTextBox.
+                textRange.Load(rtfMemoryStream, DataFormats.Rtf);
             }
 
             using (var rtfMemoryStream = new MemoryStream())
+            using (var rtfStreamReader = new StreamReader(rtfMemoryStream))
             {
-
                 textRange = new TextRange(flowDocument.ContentStart, flowDocument.ContentEnd);
                 textRange.Save(rtfMemoryStream, DataFormats.Xaml);
-                rtfMemoryStream.Seek(0, SeekOrigin.Begin);
-                using (var rtfStreamReader = new StreamReader(rtfMemoryStream))
-                {
-                    return rtfStreamReader.ReadToEnd();
-                }
+                rtfMemoryStream.Position = 0;
+
+                return rtfStreamReader.ReadToEnd();
             }
-
         }
-
-
-
-
     }
 }
